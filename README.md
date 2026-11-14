@@ -13,7 +13,7 @@ Codex が定期的に公開情報を調べ、直近24時間に公表・確認さ
 
 ## Slack 通知
 
-HIGH または CRITICAL が1件以上ある場合だけ、Incoming Webhook に通知します。LOW/MEDIUM のみ、または該当なしの場合は通知しません。
+MEDIUM 以上の事案を日本語で要約してIncoming Webhookに通知します。HIGHまたはCRITICALが含まれる場合に限り、通知本文の先頭でSlackの`<!here>`を使ってメンションします。LOWのみ、または該当なしの場合は通知しません。MEDIUM以上の各事案には日本語summaryが必要です。
 
 環境変数を設定してください:
 
@@ -58,4 +58,4 @@ Codex が調査した結果を、以下のJSON形式で標準入力からCLIに�
 mention-info-notify < report.json
 ```
 
-Each finding requires `title`, `severity` (`LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`) and an HTTP(S) source `url`. Summary and timestamps are optional. The CLI validates the report and posts only HIGH/CRITICAL entries. It exits with an error if a qualifying report exists but `SLACK_WEBHOOK_URL` is unset, or if Slack rejects the webhook request.
+各項目には`title`、`severity`（`LOW`、`MEDIUM`、`HIGH`、`CRITICAL`のいずれか）、HTTP(S)形式の`url`が必要です。MEDIUM以上の項目には日本語の`summary`も必須です。CLIはレポートを検証し、MEDIUM以上を日本語でSlackに投稿します。HIGH/CRITICALが1件以上ある場合だけ`<!here>`を付けます。LOWのみの場合は通知しません。通知対象があるのに`SLACK_WEBHOOK_URL`が未設定の場合や、SlackがWebhook要求を拒否した場合はエラー終了します。
