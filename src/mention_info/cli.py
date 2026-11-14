@@ -84,6 +84,29 @@ def format_message(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def validate_notification(notification: Any) -> dict[str, Any]:
+    if not isinstance(notification, dict) or not isinstance(notification.get("notify"), bool):
+        raise ValueError("入力はbooleanの notify を含むJSONオブジェクトにしてください")
+    if not notification["notify"]:
+        return {"notify": False, "message": "", "mention": "none"}
+
+    message = notification.get("message")
+    if not isinstance(message, str) or not message.strip():
+        raise ValueError("通知する場合は message を指定してください")
+    mention = notification.get("mention", "none")
+    if mention not in ("none", "here"):
+        raise ValueError("mention は none または here にしてください")
+    return {"notify": True, "message": message.strip(), "mention": mention}
+
+
+def format_notification(notification: dict[str, Any]) -> str:
+    if not notification["notify"]:
+        return ""
+    if notification["mention"] == "here":
+        return f"<!here>\n{notification['message']}"
+    return notification["message"]
+
+
 def post_to_slack(webhook_url: str, message: str) -> None:
     payload = json.dumps({"text": message}, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
@@ -104,16 +127,26 @@ def post_to_slack(webhook_url: str, message: str) -> None:
 
 def main() -> int:
     try:
-        report = validate_report(json.load(sys.stdin))
-        message = format_message(report)
+        payload = json.load(sys.stdin)
+        if isinstance(payload, dict) and "findings" in payload:
+            report = validate_report(payload)
+            message = format_message(report)
+            count = sum(1 for f in report["findings"] if f["severity"] in ("MEDIUM", "HIGH", "CRITICAL"))
+            no_notification = "MEDIUM以上の確認済み事案はありません。Slack通知は送信しませんでした。"
+            success_message = f"Slackに{count}件の事案を通知しました。"
+        else:
+            notification = validate_notification(payload)
+            message = format_notification(notification)
+            no_notification = "通知不要と判定されたため、Slack通知は送信しませんでした。"
+            success_message = "Slackに通知しました。"
         if not message:
-            print("MEDIUM以上の確認済み事案はありません。Slack通知は送信しませんでした。")
+            print(no_notification)
             return 0
         webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
         if not webhook_url:
-            raise ValueError("MEDIUM以上の事案を通知するには SLACK_WEBHOOK_URL が必要です")
+            raise ValueError("Slackへ通知するには SLACK_WEBHOOK_URL が必要です")
         post_to_slack(webhook_url, message)
-        print(f"Slackに{sum(1 for f in report['findings'] if f['severity'] in ('MEDIUM', 'HIGH', 'CRITICAL'))}件の事案を通知しました。")
+        print(success_message)
         return 0
     except (ValueError, json.JSONDecodeError, RuntimeError) as exc:
         print(f"エラー: {exc}", file=sys.stderr)
