@@ -1,13 +1,13 @@
-# Codex scheduled task
+# Codexスケジュール用タスク
 
-Create a **local recurring Codex schedule** for this repository. Run once per day (suggested: 09:00 Asia/Tokyo). Do not add a GitHub Actions cron.
+このリポジトリに対する**ローカルの定期Codexスケジュール**を作成します。毎日実行してください。GitHub Actionsのcronは使いません。
 
-Use this as the schedule prompt:
+スケジュールの指示文には次を使ってください。
 
-> Research publicly reported supply-chain attacks that were first disclosed or confirmed during the rolling 24 hours ending now. Search the web and verify candidate incidents against primary advisories or statements from affected maintainers, vendors, or incident responders. Use reputable independent reporting when primary information is incomplete. Exclude ordinary vulnerabilities, software outages, and unverified claims unless there is evidence of malicious compromise of a package, build system, dependency, source repository, signing/release process, or distribution channel.
+> 実行時点から遡る直近24時間に、初めて公表または確認されたサプライチェーン攻撃を調査してください。Web検索を行い、候補を影響を受けたメンテナー、ベンダー、インシデント対応者の一次情報で確認してください。一次情報が不十分な場合は信頼できる独立報道も参照してください。パッケージ、ビルドシステム、依存関係、ソースリポジトリ、署名・リリース工程、配布経路の悪意ある侵害が確認できない通常の脆弱性、障害、未確認情報は除外してください。
 >
-> Set an exact UTC start and end time for the rolling 24-hour window. Check the incident/publication timestamps, not merely the search result's crawl date. If the date cannot be established, exclude the item and state that no verified incident was found for it. Deduplicate reports about the same incident.
+> 対象となる24時間の開始・終了時刻をUTCで明記してください。検索結果のクロール日ではなく、事案または公表の日時を確認してください。日時を確認できない項目は除外し、確認できた事案がない場合はその旨を報告してください。同一事案の記事は重複排除してください。
 >
-> Assign exactly one severity to each verified incident: CRITICAL for broad or severe confirmed compromise of critical infrastructure or widespread active impact; HIGH for confirmed malicious distribution or compromise with significant user impact; MEDIUM for concrete but limited or still uncertain attack impact; LOW for limited impact, an unsuccessful attempt, or weak attack linkage. Explain the impact and confidence briefly and cite direct source URLs.
+> 確認できた事案ごとに重要度を1つ割り当ててください。CRITICALは重要基盤への広範または深刻な侵害、もしくは広い範囲で進行中の影響。HIGHは悪意ある配布や大きな利用者影響が確認されたもの。MEDIUMは具体的だが限定的、または影響がまだ不確かなもの。LOWは影響が小さい、未遂、または攻撃との関連が弱いものです。影響と判断の確度を簡潔に説明し、直接参照できる情報源のURLを付けてください。
 >
-> Prepare a JSON object with `window_start`, `window_end`, and `findings`. Each finding must contain `title`, `severity` (LOW, MEDIUM, HIGH, or CRITICAL), `url` (best primary source URL), `published_at` (ISO 8601 when known), `source`, and a concise `summary` explaining what happened and the severity rationale. If no qualifying incidents are verified, use an empty findings array. Save the JSON to a temporary file, then run `mention-info-notify < report.json` from this repository. Do not print or expose `SLACK_WEBHOOK_URL`. The CLI sends Slack notifications only for HIGH and CRITICAL. Report the search window, incident count by severity, and the sources checked in the Codex run summary; if nothing qualifies, explicitly say no verified attacks were found.
+> 結果はすべて日本語で作成してください。`window_start`、`window_end`、`findings`を含むJSONを用意してください。各項目には`title`、`severity`（LOW、MEDIUM、HIGH、CRITICAL）、`url`（最も適切な一次情報URL）、分かる場合はISO 8601形式の`published_at`、`source`、日本語の`summary`を含めてください。MEDIUM以上は事案の内容、影響、重要度の根拠をsummaryに必ず記載してください。該当する事案がなければfindingsを空配列にしてください。JSONを一時ファイルに保存し、このリポジトリで`mention-info-notify < report.json`を実行してください。`SLACK_WEBHOOK_URL`を表示または漏えいさせないでください。CLIはMEDIUM以上をSlackに通知し、HIGH/CRITICALが含まれる場合だけ`<!here>`でメンションします。Codexの実行サマリーも日本語で書き、対象期間、重要度ごとの件数、確認した情報源、Slack通知の有無を報告してください。該当がなければ、確認できる攻撃はなかったと明記してください。
