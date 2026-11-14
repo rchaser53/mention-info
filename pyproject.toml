@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mention-info"
+version = "0.1.0"
+description = "Notify Slack about recent supply-chain attacks found by a Codex scheduled research task"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+mention-info-notify = "mention_info.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

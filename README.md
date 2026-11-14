@@ -1,3 +1,61 @@
 # mention-info
 
-Supply chain attack monitoring.
+Codex が定期的に公開情報を調べ、直近24時間に公表・確認されたサプライチェーン攻撃を評価します。Codex のスケジュールが実行時刻を管理し、このリポジトリは結果の検証と Slack 通知を担当します。GitHub Actions の cron は使いません。
+
+## 重要度
+
+- **CRITICAL**: 広範な影響、進行中の侵害、または重要な基盤への深刻な侵入が確認されたもの
+- **HIGH**: 悪意あるパッケージ、侵害されたビルド/配布経路、または大きな利用者影響が確認されたもの
+- **MEDIUM**: 具体的な攻撃の兆候や限定的な侵害はあるが、影響・悪用の範囲が限定的または未確定のもの
+- **LOW**: 影響が小さい、未遂・脆弱性報告にとどまる、またはサプライチェーン攻撃との関連が弱いもの
+
+報道の更新日時と、攻撃が起きた日時を区別します。検索結果の日付だけで判断せず、元のアドバイザリや複数の信頼できる情報源を確認してください。発生・公表時刻が直近24時間と確認できない項目は含めません。確認できる攻撃がなければ空の findings を出力します。
+
+## Slack 通知
+
+HIGH または CRITICAL が1件以上ある場合だけ、Incoming Webhook に通知します。LOW/MEDIUM のみ、または該当なしの場合は通知しません。
+
+環境変数を設定してください:
+
+```sh
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+```
+
+Codex のスケジュールは、同じ環境変数が見えるローカル環境で実行してください。値をリポジトリ、スケジュールの指示文、ログに書かないでください。
+
+## セットアップ
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
+```
+
+Codex のスケジュールでこのリポジトリをプロジェクトとして選び、毎日実行するよう設定します。スケジュールの実行指示は [CODEX_SCHEDULE.md](CODEX_SCHEDULE.md) を使ってください。GitHub Actions workflow はありません。スケジュールはこのPRのマージ後に有効化してください。
+
+## 手動実行
+
+Codex が調査した結果を、以下のJSON形式で標準入力からCLIに渡します:
+
+```json
+{
+  "window_start": "2026-01-01T00:00:00Z",
+  "window_end": "2026-01-02T00:00:00Z",
+  "findings": [
+    {
+      "title": "Incident title",
+      "severity": "HIGH",
+      "url": "https://example.com/advisory",
+      "published_at": "2026-01-01T12:00:00Z",
+      "source": "Publisher",
+      "summary": "What happened and why it has this severity."
+    }
+  ]
+}
+```
+
+```sh
+mention-info-notify < report.json
+```
+
+Each finding requires `title`, `severity` (`LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`) and an HTTP(S) source `url`. Summary and timestamps are optional. The CLI validates the report and posts only HIGH/CRITICAL entries. It exits with an error if a qualifying report exists but `SLACK_WEBHOOK_URL` is unset, or if Slack rejects the webhook request.
