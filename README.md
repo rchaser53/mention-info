@@ -32,6 +32,10 @@ export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
 
 このリポジトリの`TASK_PROMPT.md`は、直近24時間の攻撃調査を行うサンプルです。MEDIUM以上を通知し、HIGH/CRITICALを含む場合だけ`here`メンションするポリシーも、このタスク固有プロンプトに定義しています。
 
+## USD/JPY急変監視のサンプル
+
+[`tasks/usdjpy/TASK_PROMPT.md`](tasks/usdjpy/TASK_PROMPT.md)に、価格の参照時間と急変しきい値を変更できる監視プロンプトを置いています。[`tasks/usdjpy/CODEX_SCHEDULE.md`](tasks/usdjpy/CODEX_SCHEDULE.md)を使い、Codexスケジュールを平日毎正時に設定します。既定の急変しきい値は0.30%で、超えた場合だけ`here`メンション付きSlack通知を出します。
+
 ## セットアップ
 
 ```sh
