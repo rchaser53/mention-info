@@ -11,6 +11,7 @@ dependencies = []
 
 [project.scripts]
 mention-info-notify = "mention_info.cli:main"
+mention-info-screen-cup-handle = "mention_info.cup_handle:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
