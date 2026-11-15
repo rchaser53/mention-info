@@ -40,6 +40,16 @@ export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
 
 [`tasks/japanese-cup-handle/TASK_PROMPT.md`](tasks/japanese-cup-handle/TASK_PROMPT.md)に、Yahoo!ファイナンスの週足・2年チャートを使った日本株候補スクリーニングを追加しています。1時間ごとに最大100銘柄を順番に処理し、進捗と重複通知抑制情報を`state.json`に保存します。新しい候補が見つかった場合だけSlackに通知します。Codexのローカルスケジュールには[`tasks/japanese-cup-handle/CODEX_SCHEDULE.md`](tasks/japanese-cup-handle/CODEX_SCHEDULE.md)を設定してください。
 
+### 実行
+
+日本株チャート監視を手動で1回実行するには、対象プロジェクトの仮想環境で次を実行します。1時間ごとのローカルスケジュールには[`tasks/japanese-cup-handle/CODEX_SCHEDULE.md`](tasks/japanese-cup-handle/CODEX_SCHEDULE.md)を設定してください。
+
+```sh
+mention-info-screen-cup-handle
+```
+
+1回あたり最大100銘柄を処理します。カーソルは`tasks/japanese-cup-handle/state.json`に保存されます。このファイルは実行時状態のためGit管理対象外です。候補通知には`SLACK_WEBHOOK_URL`が必要です。
+
 ## セットアップ
 
 ```sh
