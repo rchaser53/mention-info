@@ -7,7 +7,7 @@ name = "mention-info"
 version = "0.1.0"
 description = "Notify Slack about recent supply-chain attacks found by a Codex scheduled research task"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["sounddevice>=0.5,<1"]
 
 [project.scripts]
 mention-info-notify = "mention_info.cli:main"

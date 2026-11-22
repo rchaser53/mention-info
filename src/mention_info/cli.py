@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import wave
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -179,29 +178,27 @@ def create_voicevox_audio(text: str) -> Path:
 
 
 def play_voicevox_audio(audio_path: Path) -> None:
-    """Play a WAV synchronously before the Slack notification is sent."""
+    """Play a WAV synchronously from Python through PortAudio."""
     try:
-        if sys.platform == "darwin":
-            player = shutil.which("afplay")
-            if not player:
-                raise RuntimeError("afplay が見つかりません")
-            subprocess.run([player, str(audio_path)], check=True, capture_output=True, text=True)
-        elif sys.platform.startswith("linux"):
-            player = shutil.which("paplay") or shutil.which("aplay")
-            if not player:
-                raise RuntimeError("paplay または aplay が見つかりません")
-            subprocess.run([player, str(audio_path)], check=True, capture_output=True, text=True)
-        elif sys.platform == "win32":
-            import winsound
+        import sounddevice
+    except ImportError as exc:
+        raise RuntimeError("Python音声再生ライブラリ sounddevice が利用できません") from exc
 
-            winsound.PlaySound(str(audio_path), winsound.SND_FILENAME)
-        else:
-            raise RuntimeError(f"未対応のOSです: {sys.platform}")
-    except subprocess.CalledProcessError as exc:
-        detail = (exc.stderr or "").strip()
-        if detail:
-            detail = detail[:300]
-        raise RuntimeError(detail or f"音声プレーヤーが終了コード {exc.returncode} を返しました") from exc
+    try:
+        with wave.open(str(audio_path), "rb") as wav_file:
+            if wav_file.getcomptype() != "NONE" or wav_file.getsampwidth() != 2:
+                raise RuntimeError("再生できないWAV形式です（非圧縮16-bit PCMが必要です）")
+            sample_rate = wav_file.getframerate()
+            channels = wav_file.getnchannels()
+            audio_data = wav_file.readframes(wav_file.getnframes())
+        with sounddevice.RawOutputStream(
+            samplerate=sample_rate,
+            channels=channels,
+            dtype="int16",
+        ) as stream:
+            stream.write(audio_data)
+    except (wave.Error, sounddevice.PortAudioError) as exc:
+        raise RuntimeError(f"Pythonから音声デバイスへ出力できません: {exc}") from exc
 
 
 def main() -> int:

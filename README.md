@@ -20,7 +20,7 @@
 
 `mention`は`none`または`here`です。省略時は`none`です。通知しない場合は`{"notify": false}`を渡します。CLIは`here`の場合に`<!here>`を本文の先頭に付けて投稿します。
 
-通知JSONに`audio_text`がある場合、CLIはSlack送信前にVOICEVOX Engineでずんだもん（ノーマル）のWAVを合成して再生します。WAVを`artifacts/audio/`へ保存し、同名の`.txt`ファイルに`VOICEVOX:ずんだもん`のクレジットと読み上げ文を記録します。EngineのURLは`VOICEVOX_ENGINE_URL`で変更でき、既定値は`http://127.0.0.1:50021`です。音声の生成または再生に失敗した場合は、失敗理由をSlack本文に追記して通知を続けます。音声を使うには、通知実行時にVOICEVOX Engineと音声プレーヤーが利用可能である必要があります。
+通知JSONに`audio_text`がある場合、CLIはSlack送信前にVOICEVOX Engineでずんだもん（ノーマル）のWAVを合成し、Pythonの`sounddevice`から音声デバイスへ同期再生します。WAVを`artifacts/audio/`へ保存し、同名の`.txt`ファイルに`VOICEVOX:ずんだもん`のクレジットと読み上げ文を記録します。EngineのURLは`VOICEVOX_ENGINE_URL`で変更でき、既定値は`http://127.0.0.1:50021`です。音声の生成または再生に失敗した場合は、失敗理由をSlack本文に追記して通知を続けます。音声を使うには、通知実行時にVOICEVOX Engineと音声出力デバイスが利用可能である必要があります。
 
 環境変数を設定してください:
 
