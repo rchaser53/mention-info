@@ -1,12 +1,14 @@
-"""Codexの調査結果を検証し、MEDIUM以上をSlackに通知する。"""
+"""Codexの調査結果を検証し、HIGH以上をSlackに通知する。"""
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
-import urllib.parse
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,7 +63,7 @@ def _optional_text(value: Any) -> str:
 
 
 def format_message(report: dict[str, Any]) -> str:
-    findings = [item for item in report["findings"] if SEVERITIES.index(item["severity"]) >= 1]
+    findings = [item for item in report["findings"] if item["severity"] in ("HIGH", "CRITICAL")]
     if not findings:
         return ""
 
@@ -167,7 +169,7 @@ def create_voicevox_audio(text: str) -> Path:
 
     output_dir = Path(os.environ.get("VOICEVOX_OUTPUT_DIR", "artifacts/audio"))
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     audio_path = output_dir / f"supply-chain-summary-{timestamp}.wav"
     audio_path.write_bytes(wav_data)
     audio_path.with_suffix(".txt").write_text(
@@ -176,18 +178,49 @@ def create_voicevox_audio(text: str) -> Path:
     return audio_path
 
 
+def play_voicevox_audio(audio_path: Path) -> None:
+    """Play a WAV synchronously before the Slack notification is sent."""
+    try:
+        if sys.platform == "darwin":
+            player = shutil.which("afplay")
+            if not player:
+                raise RuntimeError("afplay が見つかりません")
+            subprocess.run([player, str(audio_path)], check=True, capture_output=True, text=True)
+        elif sys.platform.startswith("linux"):
+            player = shutil.which("paplay") or shutil.which("aplay")
+            if not player:
+                raise RuntimeError("paplay または aplay が見つかりません")
+            subprocess.run([player, str(audio_path)], check=True, capture_output=True, text=True)
+        elif sys.platform == "win32":
+            import winsound
+
+            winsound.PlaySound(str(audio_path), winsound.SND_FILENAME)
+        else:
+            raise RuntimeError(f"未対応のOSです: {sys.platform}")
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip()
+        if detail:
+            detail = detail[:300]
+        raise RuntimeError(detail or f"音声プレーヤーが終了コード {exc.returncode} を返しました") from exc
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
         if isinstance(payload, dict) and "findings" in payload:
             report = validate_report(payload)
             message = format_message(report)
-            count = sum(1 for f in report["findings"] if f["severity"] in ("MEDIUM", "HIGH", "CRITICAL"))
-            no_notification = "MEDIUM以上の確認済み事案はありません。Slack通知は送信しませんでした。"
+            high_findings = [f for f in report["findings"] if f["severity"] in ("HIGH", "CRITICAL")]
+            audio_text = "\n".join(
+                f"{f['severity']}。{f['title']}。{f['summary']}" for f in high_findings
+            )
+            count = len(high_findings)
+            no_notification = "HIGH以上の確認済み事案はありません。Slack通知は送信しませんでした。"
             success_message = f"Slackに{count}件の事案を通知しました。"
         else:
             notification = validate_notification(payload)
             message = format_notification(notification)
+            audio_text = notification["audio_text"] if notification["mention"] == "here" else ""
             no_notification = "通知不要と判定されたため、Slack通知は送信しませんでした。"
             success_message = "Slackに通知しました。"
         if not message:
@@ -197,12 +230,21 @@ def main() -> int:
         if not webhook_url:
             raise ValueError("Slackへ通知するには SLACK_WEBHOOK_URL が必要です")
         audio_path = None
-        if isinstance(payload, dict) and "findings" not in payload and notification["audio_text"]:
-            audio_path = create_voicevox_audio(notification["audio_text"])
+        audio_error = None
+        if audio_text:
+            try:
+                audio_path = create_voicevox_audio(audio_text)
+                play_voicevox_audio(audio_path)
+            except Exception as exc:
+                operation = "生成" if audio_path is None else "読み上げ"
+                audio_error = f"音声の{operation}に失敗しました: {exc}。音声なしで通知を続行します。"
+                print(audio_error, file=sys.stderr)
+        if audio_error:
+            message = f"{message}\n\n{audio_error}"
         post_to_slack(webhook_url, message)
         print(success_message)
-        if audio_path:
-            print(f"音声ファイルを作成しました: {audio_path}")
+        if audio_path and not audio_error:
+            print(f"音声を生成して読み上げました: {audio_path}")
         return 0
     except (ValueError, json.JSONDecodeError, RuntimeError) as exc:
         print(f"エラー: {exc}", file=sys.stderr)
