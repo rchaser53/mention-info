@@ -4,3 +4,4 @@ __pycache__/
 .env
 
 tasks/japanese-cup-handle/state.json
+artifacts/audio/

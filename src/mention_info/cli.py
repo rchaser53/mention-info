@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.parse
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 SEVERITIES = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
@@ -96,7 +99,15 @@ def validate_notification(notification: Any) -> dict[str, Any]:
     mention = notification.get("mention", "none")
     if mention not in ("none", "here"):
         raise ValueError("mention は none または here にしてください")
-    return {"notify": True, "message": message.strip(), "mention": mention}
+    audio_text = notification.get("audio_text", "")
+    if not isinstance(audio_text, str):
+        raise ValueError("audio_text は文字列で指定してください")
+    return {
+        "notify": True,
+        "message": message.strip(),
+        "mention": mention,
+        "audio_text": audio_text.strip(),
+    }
 
 
 def format_notification(notification: dict[str, Any]) -> str:
@@ -125,6 +136,46 @@ def post_to_slack(webhook_url: str, message: str) -> None:
         raise RuntimeError(f"Slack Webhookに接続できませんでした: {exc.reason}") from exc
 
 
+def create_voicevox_audio(text: str) -> Path:
+    """Create a Zundamon WAV and attribution sidecar using a local VOICEVOX Engine."""
+    engine_url = os.environ.get("VOICEVOX_ENGINE_URL", "http://127.0.0.1:50021").rstrip("/")
+    try:
+        with urllib.request.urlopen(f"{engine_url}/speakers", timeout=10) as response:
+            speakers = json.load(response)
+        zundamon = next(item for item in speakers if item.get("name") == "ずんだもん")
+        style = next(item for item in zundamon["styles"] if item.get("name") == "ノーマル")
+    except (urllib.error.URLError, json.JSONDecodeError, StopIteration, KeyError, TypeError) as exc:
+        raise RuntimeError("VOICEVOX Engineからずんだもん（ノーマル）の音声スタイルを取得できません") from exc
+
+    speaker_id = style["id"]
+    query = urllib.parse.urlencode({"speaker": speaker_id, "text": text})
+    try:
+        request = urllib.request.Request(f"{engine_url}/audio_query?{query}", data=b"", method="POST")
+        with urllib.request.urlopen(request, timeout=60) as response:
+            audio_query = json.load(response)
+        synthesis_query = urllib.parse.urlencode({"speaker": speaker_id})
+        request = urllib.request.Request(
+            f"{engine_url}/synthesis?{synthesis_query}",
+            data=json.dumps(audio_query, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=120) as response:
+            wav_data = response.read()
+    except (urllib.error.URLError, json.JSONDecodeError) as exc:
+        raise RuntimeError("VOICEVOX Engineで音声を合成できません") from exc
+
+    output_dir = Path(os.environ.get("VOICEVOX_OUTPUT_DIR", "artifacts/audio"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    audio_path = output_dir / f"supply-chain-summary-{timestamp}.wav"
+    audio_path.write_bytes(wav_data)
+    audio_path.with_suffix(".txt").write_text(
+        f"VOICEVOX:ずんだもん\n\n{text}\n", encoding="utf-8"
+    )
+    return audio_path
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -145,8 +196,13 @@ def main() -> int:
         webhook_url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
         if not webhook_url:
             raise ValueError("Slackへ通知するには SLACK_WEBHOOK_URL が必要です")
+        audio_path = None
+        if isinstance(payload, dict) and "findings" not in payload and notification["audio_text"]:
+            audio_path = create_voicevox_audio(notification["audio_text"])
         post_to_slack(webhook_url, message)
         print(success_message)
+        if audio_path:
+            print(f"音声ファイルを作成しました: {audio_path}")
         return 0
     except (ValueError, json.JSONDecodeError, RuntimeError) as exc:
         print(f"エラー: {exc}", file=sys.stderr)
