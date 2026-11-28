@@ -1,4 +1,4 @@
-"""Codexの調査結果を検証し、MEDIUM以上をSlackに通知する。"""
+"""Codexの調査結果を検証し、HIGH／CRITICALだけをSlackに通知する。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 SEVERITIES = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+NOTIFICATION_SEVERITIES = frozenset(("HIGH", "CRITICAL"))
 
 
 def validate_report(report: Any) -> dict[str, Any]:
@@ -42,7 +43,12 @@ def validate_report(report: Any) -> dict[str, Any]:
             "source": _optional_text(item.get("source")),
         })
 
+    audio = report.get("audio", False)
+    if not isinstance(audio, bool):
+        raise ValueError("audio はbooleanで指定してください")
+
     return {
+        "audio": audio,
         "window_start": _optional_text(report.get("window_start")),
         "window_end": _optional_text(report.get("window_end")),
         "findings": normalized,
@@ -60,15 +66,16 @@ def _optional_text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def notification_findings(report: dict[str, Any]) -> list[dict[str, str]]:
+    return [item for item in report["findings"] if item["severity"] in NOTIFICATION_SEVERITIES]
+
+
 def format_message(report: dict[str, Any]) -> str:
-    findings = [item for item in report["findings"] if SEVERITIES.index(item["severity"]) >= 1]
+    findings = notification_findings(report)
     if not findings:
         return ""
 
-    mentions_here = any(item["severity"] in ("HIGH", "CRITICAL") for item in findings)
-    lines = [":rotating_light: *サプライチェーン攻撃の調査結果*"]
-    if mentions_here:
-        lines.append("<!here>")
+    lines = [":rotating_light: *サプライチェーン攻撃の調査結果*", "<!here>"]
     start, end = report.get("window_start"), report.get("window_end")
     if start or end:
         lines.append(f"対象期間: {start or '不明'} ～ {end or '不明'}")
@@ -179,15 +186,22 @@ def create_voicevox_audio(text: str) -> Path:
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
+        audio_text = ""
         if isinstance(payload, dict) and "findings" in payload:
             report = validate_report(payload)
             message = format_message(report)
-            count = sum(1 for f in report["findings"] if f["severity"] in ("MEDIUM", "HIGH", "CRITICAL"))
-            no_notification = "MEDIUM以上の確認済み事案はありません。Slack通知は送信しませんでした。"
+            selected = notification_findings(report)
+            count = len(selected)
+            if report["audio"]:
+                audio_text = "\n".join(
+                    f"{item['severity']}。{item['title']}。{item['summary']}" for item in selected
+                )
+            no_notification = "HIGH／CRITICALの確認済み事案はありません。Slack通知は送信しませんでした。"
             success_message = f"Slackに{count}件の事案を通知しました。"
         else:
             notification = validate_notification(payload)
             message = format_notification(notification)
+            audio_text = notification.get("audio_text", "")
             no_notification = "通知不要と判定されたため、Slack通知は送信しませんでした。"
             success_message = "Slackに通知しました。"
         if not message:
@@ -197,8 +211,8 @@ def main() -> int:
         if not webhook_url:
             raise ValueError("Slackへ通知するには SLACK_WEBHOOK_URL が必要です")
         audio_path = None
-        if isinstance(payload, dict) and "findings" not in payload and notification["audio_text"]:
-            audio_path = create_voicevox_audio(notification["audio_text"])
+        if audio_text:
+            audio_path = create_voicevox_audio(audio_text)
         post_to_slack(webhook_url, message)
         print(success_message)
         if audio_path:

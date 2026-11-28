@@ -1,6 +1,6 @@
 # 汎用定期処理のシーケンス
 
-スケジュール、タスク固有プロンプト、共通Slack CLIの責務を分けています。
+スケジュール、タスク固有プロンプト、共通Slack CLIの責務を分けています。以下の図は汎用通知形式の流れです。サプライチェーン調査ではCodexは通知要否を決めず、全重要度の`findings`をCLIへ渡します。CLIがHIGH／CRITICALを抽出し、0件ならスキップ、1件以上なら`<!here>`付きで送信します。
 
 ```mermaid
 sequenceDiagram
@@ -48,7 +48,7 @@ sequenceDiagram
 - **Codexスケジュール（cron）**: プロジェクトを指定時刻に起動します。GitHub Actionsは使いません。
 - **TASK_PROMPT.md**: タスクごとの作業手順、通知条件、メンション基準を定義します。Gitで管理し、実行時は選択したローカルプロジェクトのファイルを読みます。
 - **Codex**: プロンプトに沿って作業し、結果から通知要否を判断して共通JSONを作ります。
-- **mention-info CLI**: 共通JSONを検証し、必要に応じて`<!here>`を加えてSlack Webhookへ中継します。タスクの内容や通知しきい値は判断しません。
+- **mention-info CLI**: 共通JSONを検証し、必要に応じて`<!here>`を加えてSlack Webhookへ中継します。汎用通知形式ではタスクの通知しきい値を判断しません。サプライチェーンの`findings`形式では、全件を検証した後にHIGH／CRITICALのみを選択し、通知要否・件数・メンションをコード上で判断します。MEDIUM以下のみ・空配列では通信せず正常終了します。
 - **Slack Webhook / Slack**: CLIから受け取ったメッセージをチャンネルに投稿します。
 
 通知JSONは`{"notify": false}`または`{"notify": true, "message": "...", "mention": "none|here"}`です。Webhook URLは`SLACK_WEBHOOK_URL`環境変数から読み込み、値を表示・記録しません。
